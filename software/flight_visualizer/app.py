@@ -36,25 +36,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Sample Data ---
-SAMPLE_DIR = Path(__file__).resolve().parent.parent
-TEST_SAMPLES_DIR = SAMPLE_DIR / "test_samples"
+# Build path to /data/samples directory
+SAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "samples"
 SAMPLES = {
     "None": None,
-    # Original samples
-    "KITTI Driving (Germany)": SAMPLE_DIR / "kitti_driving_sample.csv",
-    "Rocket Launch (Nevada)": SAMPLE_DIR / "rocket_launch_sample.csv",
-    "Urban Drive (San Francisco)": SAMPLE_DIR / "urban_drive_sample.csv",
     # KITTI Test Suite (10 samples, 2+ minutes each)
-    "KITTI 01: Start (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_01_start.csv",
-    "KITTI 02: Early (2.3m)": TEST_SAMPLES_DIR / "kitti_sample_02_early.csv",
-    "KITTI 03: Morning (2.3m)": TEST_SAMPLES_DIR / "kitti_sample_03_morning.csv",
-    "KITTI 04: Midway A (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_04_midway_a.csv",
-    "KITTI 05: Midway B (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_05_midway_b.csv",
-    "KITTI 06: Center (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_06_center.csv",
-    "KITTI 07: Afternoon (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_07_afternoon.csv",
-    "KITTI 08: Late (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_08_late.csv",
-    "KITTI 09: Final (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_09_final.csv",
-    "KITTI 10: End (2.5m)": TEST_SAMPLES_DIR / "kitti_sample_10_end.csv",
+    "KITTI 01: Start (2.5m)": SAMPLES_DIR / "kitti_sample_01_start.csv",
+    "KITTI 02: Early (2.3m)": SAMPLES_DIR / "kitti_sample_02_early.csv",
+    "KITTI 03: Morning (2.3m)": SAMPLES_DIR / "kitti_sample_03_morning.csv",
+    "KITTI 04: Midway A (2.5m)": SAMPLES_DIR / "kitti_sample_04_midway_a.csv",
+    "KITTI 05: Midway B (2.5m)": SAMPLES_DIR / "kitti_sample_05_midway_b.csv",
+    "KITTI 06: Center (2.5m)": SAMPLES_DIR / "kitti_sample_06_center.csv",
+    "KITTI 07: Afternoon (2.5m)": SAMPLES_DIR / "kitti_sample_07_afternoon.csv",
+    "KITTI 08: Late (2.5m)": SAMPLES_DIR / "kitti_sample_08_late.csv",
+    "KITTI 09: Final (2.5m)": SAMPLES_DIR / "kitti_sample_09_final.csv",
+    "KITTI 10: End (2.5m)": SAMPLES_DIR / "kitti_sample_10_end.csv",
 }
 
 

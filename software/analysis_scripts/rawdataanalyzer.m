@@ -6,7 +6,10 @@ useLiveData = false; % << SET TO true FOR LIVE, false FOR CSV
 port = "COM3";
 baudrate = 115200;
 g = 9.80665;
-fileName = "test_data.csv";
+% !! IMPORTANT !!
+% Set this to the path of your CSV data log. The log file must have a header
+% and 20 columns in the format specified in example_format.csv.
+fileName = "..\..\data\samples\kitti_sample_01_start.csv";
 
 % -- Data Loading --
 if useLiveData
@@ -17,10 +20,12 @@ if useLiveData
     allData = []; % Not pre-loaded for live
 else
     if ~exist(fileName, 'file')
-        error('Specified data file not found: %s', fileName);
+        error('Specified data file not found: %s. Please update the fileName variable.', fileName);
     end
     fprintf('Loading data from %s...\n', fileName);
-    allData = readmatrix(fileName);
+    % Use readtable to handle the header, then convert to a matrix.
+    T = readtable(fileName);
+    allData = T{:,:};
     s = []; % No serial object
 end
 
@@ -92,9 +97,11 @@ while loopCondition
             i = i + 1;
         end
 
-        if length(vals) < 16, continue; end % Header has 16 columns
+        % Expects 20 columns: ms,q(w,x,y,z),a(x,y,z),g(x,y,z),m(x,y,z),alt,fix,lat,lon,spd,hdg
+        if length(vals) < 20, continue; end
 
-        % Data Mapping
+        % Data Mapping (from example_format.csv)
+        % 1:ms, 2-5:qw,qx,qy,qz, 6-8:ax,ay,az, 15:alt
         t_ms = vals(1);
         q_raw_NED = quaternion(vals(2), vals(3), vals(4), vals(5)); % w, x, y, z from filter is NED
         accel_body = [vals(6); vals(7); vals(8)]; % Raw sensor data is Z-up

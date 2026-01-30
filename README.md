@@ -9,7 +9,7 @@ Navigate to the Tools > Boards > Raspberry Pi Pico RP2040/RP2350 > Adafruit Feat
 
 Note: If there is no serial Port available in the dropdown, or an invalid one appears - don't worry about it! The RP2040 does not actually use a serial port to upload, so its OK if it does not appear if in manual bootload mode. You will see a serial port appear after uploading your first sketch.
 
-# Neccesary Libraries (include all dependencies)
+# Necessary Libraries (include all dependencies)
 Adafruit_BMP3XX  
 Adafruit GPS Library  
 RTClib  

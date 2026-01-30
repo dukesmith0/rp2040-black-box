@@ -1,0 +1,24 @@
+# Vibe files
+.vibe/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.env
+
+# KITTI cache
+kitti_cache/
+kitti_temp/
+*.zip
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

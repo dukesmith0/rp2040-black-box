@@ -22,3 +22,16 @@ kitti_temp/
 # OS
 .DS_Store
 Thumbs.db
+nul
+desktop.ini
+
+# MATLAB
+*.asv
+*.m~
+*.slx.autosave
+
+# Arduino
+*.elf
+*.hex
+*.bin
+build/

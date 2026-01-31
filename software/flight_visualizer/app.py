@@ -56,7 +56,7 @@ SAMPLES = {
 
 def load_csv(file) -> pd.DataFrame:
     """Load and validate CSV data."""
-    df = pd.read_csv(file)
+    df = pd.read_csv(file, comment='#')
 
     # Only ms is required
     if 'ms' not in df.columns:

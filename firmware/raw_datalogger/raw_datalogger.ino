@@ -1,32 +1,35 @@
 /*
-  RP2040 Black Box Data Logger
-  Outputs CSV format: ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading
+  RP2040 Black Box Raw Data Logger
+  Outputs CSV format: ms,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading
+
+  Raw sensor data only - no AHRS filtering. Use for offline sensor fusion.
 */
 
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
+#include <RTClib.h>
 #include <Adafruit_BMP3XX.h>
 #include <Adafruit_LSM6DSOX.h>
 #include <Adafruit_LIS3MDL.h>
 #include <Adafruit_GPS.h>
-#include <Adafruit_AHRS.h>
 
 // Sensors
 Adafruit_BMP3XX bmp;
 Adafruit_LSM6DSOX sox;
 Adafruit_LIS3MDL lis3mdl;
 Adafruit_GPS GPS(&Wire);
-Adafruit_Mahony filter;
+RTC_PCF8523 rtc;
 
 // Settings
-#define FILTER_UPDATE_RATE_HZ 100
+#define LOG_RATE_HZ 100
 #define GPSECHO false
 
 // Globals
 File logFile;
 String fileName = "data.csv";
-uint32_t last_filter_update = 0;
+uint32_t last_log_time = 0;
+bool rtcValid = false;
 
 void setup() {
   Serial.begin(115200);
@@ -70,22 +73,49 @@ void setup() {
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
   GPS.sendCommand(PGCMD_ANTENNA);
 
-  // Initialize AHRS
-  filter.begin(FILTER_UPDATE_RATE_HZ);
+  // Initialize RTC
+  if (!rtc.begin()) {
+    Serial.println("RTC not found!");
+  } else if (!rtc.initialized() || rtc.lostPower()) {
+    Serial.println("RTC not set, using fallback naming");
+  } else {
+    rtcValid = true;
+    Serial.println("RTC initialized");
+  }
 
   // Initialize SD Card
   // Uses default SS pin for the board variant
   if (!SD.begin()) {
     Serial.println("SD Card failed!");
   } else {
-    // Create unique file
-    for (int i = 0; i < 1000; i++) {
-      fileName = "log" + String(i) + ".csv";
-      if (!SD.exists(fileName)) break;
+    // Create filename from RTC or fall back to sequential
+    if (rtcValid) {
+      DateTime now = rtc.now();
+      char buf[20];
+      sprintf(buf, "%04d%02d%02d_%02d%02d%02d.csv",
+              now.year(), now.month(), now.day(),
+              now.hour(), now.minute(), now.second());
+      fileName = String(buf);
+    } else {
+      // Fallback to sequential naming
+      for (int i = 0; i < 1000; i++) {
+        fileName = "log" + String(i) + ".csv";
+        if (!SD.exists(fileName)) break;
+      }
     }
+
     logFile = SD.open(fileName, FILE_WRITE);
     if (logFile) {
-      logFile.println("ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
+      // Write start timestamp header if RTC is valid
+      if (rtcValid) {
+        DateTime now = rtc.now();
+        char timestamp[32];
+        sprintf(timestamp, "# Start: %04d-%02d-%02dT%02d:%02d:%02d",
+                now.year(), now.month(), now.day(),
+                now.hour(), now.minute(), now.second());
+        logFile.println(timestamp);
+      }
+      logFile.println("ms,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
       logFile.flush();
       Serial.print("Logging to: "); Serial.println(fileName);
     }
@@ -100,22 +130,13 @@ void loop() {
   }
 
   // Main Loop @ 100Hz
-  if (millis() - last_filter_update >= (1000 / FILTER_UPDATE_RATE_HZ)) {
-    last_filter_update = millis();
+  if (millis() - last_log_time >= (1000 / LOG_RATE_HZ)) {
+    last_log_time = millis();
 
     // Read IMU
     sensors_event_t accel, gyro, temp, mag;
     sox.getEvent(&accel, &gyro, &temp);
     lis3mdl.getEvent(&mag);
-
-    // Update Filter (Gyro in deg/s for Mahony)
-    float gx_deg = gyro.gyro.x * SENSORS_RADS_TO_DPS;
-    float gy_deg = gyro.gyro.y * SENSORS_RADS_TO_DPS;
-    float gz_deg = gyro.gyro.z * SENSORS_RADS_TO_DPS;
-
-    filter.update(gx_deg, gy_deg, gz_deg,
-                  accel.acceleration.x, accel.acceleration.y, accel.acceleration.z,
-                  mag.magnetic.x, mag.magnetic.y, mag.magnetic.z);
 
     // Read Altitude
     bmp.performReading();
@@ -123,11 +144,6 @@ void loop() {
     // Build CSV String
     String data = "";
     data += String(millis()) + ",";
-
-    // Quaternion
-    float qw, qx, qy, qz;
-    filter.getQuaternion(&qw, &qx, &qy, &qz);
-    data += String(qw, 4) + "," + String(qx, 4) + "," + String(qy, 4) + "," + String(qz, 4) + ",";
 
     // Accel (m/s^2)
     data += String(accel.acceleration.x, 2) + "," + String(accel.acceleration.y, 2) + "," + String(accel.acceleration.z, 2) + ",";
@@ -154,10 +170,10 @@ void loop() {
     Serial.println(data);
     if (logFile) {
       logFile.println(data);
-      
+
       // Flush periodically (e.g. every 1 second)
       static int flushCounter = 0;
-      if (flushCounter++ > FILTER_UPDATE_RATE_HZ) {
+      if (flushCounter++ > LOG_RATE_HZ) {
         logFile.flush();
         flushCounter = 0;
       }

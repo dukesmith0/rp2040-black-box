@@ -133,3 +133,28 @@ streamlit run app.py
 - RTC timestamp header: `# Start: YYYY-MM-DDTHH:MM:SS`
 - Automatic file naming from RTC (e.g., `20260130_143022.csv`)
 - Fallback to sequential naming if RTC unavailable (`log0.csv`, `log1.csv`, ...)
+
+---
+
+## Future Plans
+
+### Enclosure
+- Design and 3D print enclosure using Adafruit breakout boards (once arrived)
+- Ruggedize with TPU secondary enclosure for crash survivability
+
+### Hardware Improvements
+- Upgrade GPS module to use a larger antenna for better signal
+- Design custom PCB integrating RP2040 and all sensors onto a single board for reduced size, fewer cables, and lower cost
+
+### Power & Monitoring
+- Optimize battery usage and create power consumption metrics
+- Add internal telemetry: battery life, board temperature
+- Use thermal data to optimize cooling and ensure stability throughout battery life
+
+### AI Integration
+- Transition to an AI-optimized microcontroller for on-device inference
+- AI-enhanced dead reckoning to reduce position drift when GPS is unavailable
+- Altitude fusion model to correct for local pressure variations
+- Predict remaining battery life based on flight behavior patterns
+- Auto-label flight phases (takeoff, cruise, landing, idle) from sensor signatures
+- Anomaly detection to flag unusual vibration or orientation patterns

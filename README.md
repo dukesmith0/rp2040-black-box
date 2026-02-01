@@ -147,11 +147,15 @@ Or try the live demo: **[rp2040-fdr-visualizer.streamlit.app](https://rp2040-fdr
 ### Hardware Improvements
 - Upgrade GPS module to use a larger antenna for better signal
 - Design custom PCB integrating RP2040 and all sensors onto a single board for reduced size, fewer cables, and lower cost
+- Add Bluetooth for wireless flight data streaming and capture
 
 ### Power & Monitoring
 - Optimize battery usage and create power consumption metrics
 - Add internal telemetry: battery life, board temperature
 - Use thermal data to optimize cooling and ensure stability throughout battery life
+
+### Software
+- Add Simulink visualization for real-time 3D flight simulation and analysis
 
 ### AI Integration
 - Transition to an AI-optimized microcontroller for on-device inference

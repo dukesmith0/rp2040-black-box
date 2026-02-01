@@ -95,6 +95,8 @@ cd software/flight_visualizer
 streamlit run app.py
 ```
 
+Or try the live demo: **[rp2040-fdr-visualizer.streamlit.app](https://rp2040-fdr-visualizer.streamlit.app/)**
+
 ---
 
 ## Firmware Variants

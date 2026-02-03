@@ -1,10 +1,12 @@
 /*
-  RP2040 Black Box Data Logger - Dual Core with AHRS Filter
+  RP2040 Black Box Data Logger - Dual Core with AHRS Filter (Serial Output Only)
 
-  Core 0: Sensor reading, data logging to SD card
+  Core 0: Sensor reading, data output to serial
   Core 1: AHRS filter processing (Madgwick or Mahony)
 
-  Outputs CSV format: ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading
+  Outputs CSV format to Serial: ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading
+
+  This version is for bench testing without SD card dependency.
 */
 
 // ============================================================
@@ -14,9 +16,6 @@
 #define USE_MAHONY  // Default: Mahony filter (~2-3s convergence with Kp=10.0)
 
 #include <Wire.h>
-#include <SPI.h>
-#include "SdFat.h"
-#include <RTClib.h>
 #include <Adafruit_BMP3XX.h>
 #include <Adafruit_LSM6DSOX.h>
 #include <Adafruit_LIS3MDL.h>
@@ -28,7 +27,6 @@ Adafruit_BMP3XX bmp;
 Adafruit_LSM6DSOX sox;
 Adafruit_LIS3MDL lis3mdl;
 Adafruit_GPS GPS(&Wire);
-RTC_PCF8523 rtc;
 
 // AHRS filter (Core 1 only)
 #ifdef USE_MADGWICK
@@ -61,16 +59,8 @@ struct FilterOutput {
 volatile SensorData sensorData = {0, 0, 0, 0, 0, 0, 0, 0, 0, false};
 volatile FilterOutput filterOutput = {1.0f, 0, 0, 0, false};
 
-// SD Card configuration for Adafruit RP2040 Adalogger
-#define SD_CS_PIN 23  // CS pin for RP2040 Adalogger (NOT pin 10!)
-SdFat SD;
-FsFile logFile;
-SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
-
 // Core 0 globals
-String fileName = "data.csv";
 uint32_t last_sample_time = 0;
-bool rtcValid = false;
 
 // ============================================================
 // CORE 1: Madgwick Filter Processing
@@ -124,12 +114,12 @@ void loop1() {
 }
 
 // ============================================================
-// CORE 0: Sensor Reading and Data Logging
+// CORE 0: Sensor Reading and Serial Output
 // ============================================================
 
 void setup() {
   Serial.begin(115200);
-  // while (!Serial) delay(10); // Uncomment to wait for serial console
+  while (!Serial) delay(10); // Wait for serial console
 
   Wire.begin();
 
@@ -169,88 +159,14 @@ void setup() {
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
   GPS.sendCommand(PGCMD_ANTENNA);
 
-  // Initialize RTC
-  if (!rtc.begin()) {
-    Serial.println("RTC not found!");
-  } else if (!rtc.initialized() || rtc.lostPower()) {
-    Serial.println("RTC not set, using fallback naming");
-  } else {
-    rtcValid = true;
-    Serial.println("RTC initialized");
-  }
-
-  // Initialize SD Card
-  // CS pin 23 for Adafruit RP2040 Adalogger, SPI1 @ 16MHz
-  Serial.print("Initializing SD card...");
-  delay(100);  // Give SD card time to power up
-
-  // Retry mechanism for SD card initialization
-  int retryCount = 0;
-  const int maxRetries = 5;
-  bool sdInitialized = false;
-
-  while (!SD.begin(config)) {
-    retryCount++;
-    if (retryCount >= maxRetries) {
-      Serial.println();
-      Serial.println("SD Card failed after 5 retries!");
-      Serial.println("Troubleshooting:");
-      Serial.println("  1. Is the SD card inserted properly?");
-      Serial.println("  2. Is the card formatted as FAT32?");
-      Serial.println("  3. Try formatting with 4KB allocation unit size");
-      Serial.println("  4. Are the card contacts clean?");
-      Serial.println("  5. Try a different SD card (some cheap cards don't work)");
-      Serial.println("  6. Verify you're using CS pin 23 (NOT pin 10)");
-      break;
-    }
-    Serial.print(".");
-    delay(1000); // Wait before retrying
-  }
-
-  if (retryCount < maxRetries) {
-    sdInitialized = true;
-    Serial.println();
-    Serial.println("SD Card initialized successfully");
-    // Create filename from RTC or fall back to sequential
-    if (rtcValid) {
-      DateTime now = rtc.now();
-      char buf[20];
-      sprintf(buf, "%04d%02d%02d_%02d%02d%02d.csv",
-              now.year(), now.month(), now.day(),
-              now.hour(), now.minute(), now.second());
-      fileName = String(buf);
-    } else {
-      // Fallback to sequential naming
-      for (int i = 0; i < 1000; i++) {
-        fileName = "log" + String(i) + ".csv";
-        if (!SD.exists(fileName.c_str())) break;
-      }
-    }
-
-    logFile = SD.open(fileName.c_str(), FILE_WRITE);
-    if (logFile) {
-      // Write start timestamp header if RTC is valid
-      if (rtcValid) {
-        DateTime now = rtc.now();
-        char timestamp[32];
-        sprintf(timestamp, "# Start: %04d-%02d-%02dT%02d:%02d:%02d",
-                now.year(), now.month(), now.day(),
-                now.hour(), now.minute(), now.second());
-        logFile.println(timestamp);
-      }
-      logFile.println("ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
-      logFile.flush();
-      Serial.print("Logging to: "); Serial.println(fileName);
-    } else {
-      Serial.println("Failed to open log file!");
-    }
-  }
+  // Print CSV header
+  Serial.println("ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
 
   // Print active filter
 #ifdef USE_MADGWICK
-  Serial.println("Dual-core Madgwick filter active");
+  Serial.println("Dual-core Madgwick filter active - Serial output only");
 #elif defined(USE_MAHONY)
-  Serial.println("Dual-core Mahony filter active (Kp=10.0)");
+  Serial.println("Dual-core Mahony filter active (Kp=10.0) - Serial output only");
 #endif
 }
 
@@ -319,17 +235,7 @@ void loop() {
       data += "0.0,0.0,0.0,0.0";
     }
 
-    // Output
+    // Output to Serial only
     Serial.println(data);
-    if (logFile) {
-      logFile.println(data);
-
-      // Flush periodically (e.g. every 1 second)
-      static int flushCounter = 0;
-      if (flushCounter++ > FILTER_UPDATE_RATE_HZ) {
-        logFile.flush();
-        flushCounter = 0;
-      }
-    }
   }
 }

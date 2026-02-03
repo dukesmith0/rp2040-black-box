@@ -7,7 +7,7 @@
 
 #include <Wire.h>
 #include <SPI.h>
-#include <SD.h>
+#include "SdFat.h"
 #include <RTClib.h>
 #include <Adafruit_BMP3XX.h>
 #include <Adafruit_LSM6DSOX.h>
@@ -21,12 +21,17 @@ Adafruit_LIS3MDL lis3mdl;
 Adafruit_GPS GPS(&Wire);
 RTC_PCF8523 rtc;
 
+// SD Card configuration for Adafruit RP2040 Adalogger
+#define SD_CS_PIN 23  // CS pin for RP2040 Adalogger (NOT pin 10!)
+SdFat SD;
+FsFile logFile;
+SdSpiConfig config(SD_CS_PIN, DEDICATED_SPI, SD_SCK_MHZ(16), &SPI1);
+
 // Settings
 #define LOG_RATE_HZ 100
 #define GPSECHO false
 
 // Globals
-File logFile;
 String fileName = "data.csv";
 uint32_t last_log_time = 0;
 bool rtcValid = false;
@@ -84,10 +89,37 @@ void setup() {
   }
 
   // Initialize SD Card
-  // Uses default SS pin for the board variant
-  if (!SD.begin()) {
-    Serial.println("SD Card failed!");
-  } else {
+  // CS pin 23 for Adafruit RP2040 Adalogger, SPI1 @ 16MHz
+  Serial.print("Initializing SD card...");
+  delay(100);  // Give SD card time to power up
+
+  // Retry mechanism for SD card initialization
+  int retryCount = 0;
+  const int maxRetries = 5;
+  bool sdInitialized = false;
+
+  while (!SD.begin(config)) {
+    retryCount++;
+    if (retryCount >= maxRetries) {
+      Serial.println();
+      Serial.println("SD Card failed after 5 retries!");
+      Serial.println("Troubleshooting:");
+      Serial.println("  1. Is the SD card inserted properly?");
+      Serial.println("  2. Is the card formatted as FAT32?");
+      Serial.println("  3. Try formatting with 4KB allocation unit size");
+      Serial.println("  4. Are the card contacts clean?");
+      Serial.println("  5. Try a different SD card (some cheap cards don't work)");
+      Serial.println("  6. Verify you're using CS pin 23 (NOT pin 10)");
+      break;
+    }
+    Serial.print(".");
+    delay(1000); // Wait before retrying
+  }
+
+  if (retryCount < maxRetries) {
+    sdInitialized = true;
+    Serial.println();
+    Serial.println("SD Card initialized successfully");
     // Create filename from RTC or fall back to sequential
     if (rtcValid) {
       DateTime now = rtc.now();
@@ -100,11 +132,11 @@ void setup() {
       // Fallback to sequential naming
       for (int i = 0; i < 1000; i++) {
         fileName = "log" + String(i) + ".csv";
-        if (!SD.exists(fileName)) break;
+        if (!SD.exists(fileName.c_str())) break;
       }
     }
 
-    logFile = SD.open(fileName, FILE_WRITE);
+    logFile = SD.open(fileName.c_str(), FILE_WRITE);
     if (logFile) {
       // Write start timestamp header if RTC is valid
       if (rtcValid) {
@@ -118,6 +150,8 @@ void setup() {
       logFile.println("ms,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
       logFile.flush();
       Serial.print("Logging to: "); Serial.println(fileName);
+    } else {
+      Serial.println("Failed to open log file!");
     }
   }
 }

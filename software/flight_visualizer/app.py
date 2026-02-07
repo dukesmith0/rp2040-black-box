@@ -17,7 +17,7 @@ from pathlib import Path
 # --- Configuration ---
 st.set_page_config(
     page_title="Flight Visualizer",
-    page_icon="🛩️",
+    page_icon="🛩️", # Incredible Emoji
     layout="wide"
 )
 

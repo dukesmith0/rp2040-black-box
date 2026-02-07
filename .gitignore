@@ -25,20 +25,14 @@ Thumbs.db
 nul
 desktop.ini
 
-# MATLAB
-*.asv
-*.m~
-*.slx.autosave
-
 # Arduino
 *.elf
 *.hex
 *.bin
 build/
-firmware/quat_datalogger/ekf.h
 
 # Development notes
 futuredev.md
 
-# Testing files
+# Temp testing files
 .test/

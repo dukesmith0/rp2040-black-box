@@ -24,6 +24,8 @@ Flight data logging system using an Adafruit RP2040 microcontroller to capture I
 
 The first enclosure prototype is complete.
 
+![Enclosure R1 assembled](images/enclosure_r1_assembled.jpg)
+
 | Part | Quantity |
 |------|----------|
 | M2.5 heat inserts | 14 |

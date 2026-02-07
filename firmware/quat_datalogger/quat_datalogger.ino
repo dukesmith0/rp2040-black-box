@@ -73,7 +73,7 @@ uint32_t last_sample_time = 0;
 bool rtcValid = false;
 
 // ============================================================
-// CORE 1: Madgwick Filter Processing
+// CORE 1: AHRS Filter Processing
 // ============================================================
 
 void setup1() {
@@ -102,12 +102,12 @@ void loop1() {
     float mz = sensorData.mz;
     sensorData.newData = false;
 
-    // Convert gyro to deg/s for Madgwick filter
+    // Convert gyro to deg/s for filter
     float gx_deg = gx * SENSORS_RADS_TO_DPS;
     float gy_deg = gy * SENSORS_RADS_TO_DPS;
     float gz_deg = gz * SENSORS_RADS_TO_DPS;
 
-    // Update Madgwick filter
+    // Update filter
     filter.update(gx_deg, gy_deg, gz_deg, ax, ay, az, mx, my, mz);
 
     // Get quaternion output
@@ -263,7 +263,10 @@ void loop() {
 
   // Main Loop @ 100Hz
   if (millis() - last_sample_time >= (1000 / FILTER_UPDATE_RATE_HZ)) {
-    last_sample_time = millis();
+    last_sample_time += (1000 / FILTER_UPDATE_RATE_HZ);
+    // Guard against falling behind: if we missed more than one period, reset
+    if (millis() - last_sample_time > (1000 / FILTER_UPDATE_RATE_HZ))
+      last_sample_time = millis();
 
     // Read IMU sensors
     sensors_event_t accel, gyro, temp, mag;
@@ -295,7 +298,7 @@ void loop() {
     String data = "";
     data += String(millis()) + ",";
 
-    // Quaternion (from Core 1 Madgwick filter)
+    // Quaternion (from Core 1 filter)
     data += String(qw, 4) + "," + String(qx, 4) + "," + String(qy, 4) + "," + String(qz, 4) + ",";
 
     // Accel (m/s^2)
@@ -324,9 +327,9 @@ void loop() {
     if (logFile) {
       logFile.println(data);
 
-      // Flush periodically (e.g. every 1 second)
+      // Flush periodically (every 1 second)
       static int flushCounter = 0;
-      if (flushCounter++ > FILTER_UPDATE_RATE_HZ) {
+      if (flushCounter++ >= FILTER_UPDATE_RATE_HZ) {
         logFile.flush();
         flushCounter = 0;
       }

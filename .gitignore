@@ -35,6 +35,10 @@ desktop.ini
 *.hex
 *.bin
 build/
+firmware/quat_datalogger/ekf.h
+
+# Development notes
+futuredev.md
 
 # Testing files
 .test/

@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: 2026 Claude Code / Anthropic
-// Based on Adafruit RP2040 Adalogger SD card example
-// SPDX-License-Identifier: MIT
-
 /*
   RP2040 SD Card Diagnostic Tool
 

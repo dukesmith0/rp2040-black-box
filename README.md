@@ -54,7 +54,7 @@ rp2040-black-box/
 │       └── sd_card_tester/    # SD card diagnostic tool
 ├── software/
 │   ├── flight_visualizer/     # Python Streamlit web app
-│   └── matlab-visualizer/     # MATLAB trajectory & sensor plotter
+│   └── matlab-visualizer/     # MATLAB trajectory plotter & live orientation viewer
 ├── data/
 │   └── samples/               # KITTI-derived test datasets
 └── hardware/
@@ -117,6 +117,8 @@ If SD initialization fails, check that the card is inserted and formatted as FAT
 ### quat_datalogger
 
 Dual-core flight data logger with real-time AHRS filtering and signal processing.
+
+![Serial Data](images/serialdata.gif)
 
 **Core 0** reads sensors and logs to SD at 100Hz. **Core 1** runs the Mahony AHRS filter at 200Hz.
 
@@ -242,6 +244,8 @@ After calibrating, run these checks on the quat_datalogger.ino firmware.
 
 Interactive web-based visualization.
 
+![Streamlit Visualization](images/streamlit_visualization.png)
+
 ```bash
 pip install streamlit pandas numpy plotly scipy
 cd software/flight_visualizer
@@ -252,7 +256,9 @@ Live demo: **[rp2040-fdr-visualizer.streamlit.app](https://rp2040-fdr-visualizer
 
 ### Trajectory Visualizer (MATLAB)
 
-Desktop visualization with satellite map overlays and sensor charts. Requires MATLAB (no additional toolboxes).
+Desktop visualization with satellite map overlays, dead reckoning, and sensor charts. Requires MATLAB with **Navigation Toolbox** (`quaternion`, `rotateframe`).
+
+![Matlab Visualization](images/matlab_visualization.png)
 
 ```
 Open MATLAB → navigate to software/matlab-visualizer/ → run trajectoryvisualizer.m
@@ -262,11 +268,23 @@ A file picker dialog opens — select any 20-column CSV from `data/samples/` or 
 
 **Displays:**
 - Summary statistics popup (duration, distance, speed, altitude range)
-- 2D GPS track on satellite basemap (color-coded by time)
-- 3D trajectory plot (North/East/Altitude in meters)
+- 2D GPS + dead-reckoned track on satellite basemap (time-gradient colored, circle markers for GPS, diamond markers for dead reckoned)
+- 3D trajectory with gradient-colored line (North/East/Altitude in meters)
 - 4-panel sensor charts: Speed & Altitude, Quaternion, Accelerometer, Gyroscope
 
-The satellite basemap (`geobasemap('satellite')`) can be changed to `'streets'` or `'topographic'` by editing line 98.
+When GPS fix is lost, the visualizer dead-reckons position by rotating body-frame acceleration to NED using the quaternion, subtracting gravity, and integrating velocity/position. Barometric altitude is used for the vertical axis throughout.
+
+### Live Orientation Visualizer (MATLAB)
+
+Real-time 3D orientation display from live serial data. Connects to the RP2040 over USB and renders orientation using `poseplot`. Requires MATLAB with **Navigation Toolbox** and R2019b+ (`serialport`).
+
+![Live Orientation](images/liveorientation.gif)
+
+```
+Open MATLAB → navigate to software/matlab-visualizer/ → run liveorientationvisualizer.m
+```
+
+Select a serial port and baud rate (default 115200) when prompted. The figure updates in real time as the device streams quaternion data. Close the figure window to disconnect.
 
 ---
 

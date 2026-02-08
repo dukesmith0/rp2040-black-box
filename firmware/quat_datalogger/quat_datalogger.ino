@@ -64,9 +64,17 @@ static const bool  BARO_GPS_AUTO_CAL   = true;    // Auto-set from first good GP
 
 // --- Mahony AHRS (Core 1) ---
 static const float MAHONY_KP_STARTUP   = 10.0f;   // High gain for fast initial convergence
-static const float MAHONY_KP_STEADY    = 1.5f;    // Low gain for smooth steady-state
-static const float MAHONY_KI           = 0.01f;   // Integral gain for gyro bias correction
+static const float MAHONY_KP_STEADY    = 1.0f;    // Low gain for smooth steady-state (range: 0.5–1.25)
+static const float MAHONY_KI           = 0.008f;  // Integral gain for gyro bias correction (range: 0.005–0.01)
 static const float ADAPTIVE_TRANSITION = 5.0f;    // Seconds until Kp drops to steady value
+
+// --- Adaptive Accelerometer Rejection ---
+// When accel magnitude deviates from 1g, the accelerometer is sensing non-gravitational
+// forces (maneuvers, vibration, impacts). Scale down Kp to rely more on gyro.
+static const float ACCEL_1G            = 9.81f;   // Expected gravity magnitude (m/s²)
+static const float ACCEL_REJECT_SOFT   = 0.3f;    // Start scaling Kp at this fractional deviation from 1g
+static const float ACCEL_REJECT_HARD   = 0.7f;    // Full gyro-only mode at this deviation
+static const float ACCEL_REJECT_KP_MIN = 0.02f;   // Minimum Kp during rejection (not zero, avoids drift)
 
 // --- Filter / Logging Rates ---
 // Gigher filter rate allows for better sensor fusion, slower update rate means lower CPU load due to SD card writes.
@@ -193,16 +201,34 @@ void loop1() {
   float mz = sensorData.mz;
   sensorData.newData = false;
 
-  // --- ADAPTIVE GAIN ---
+  // --- ADAPTIVE GAIN (startup ramp) ---
   // Ramp Kp from startup value down to steady value over ADAPTIVE_TRANSITION seconds
   float elapsed = millis() / 1000.0f;
+  float baseKp;
   if (elapsed < ADAPTIVE_TRANSITION) {
     float t = elapsed / ADAPTIVE_TRANSITION;               // 0 → 1
-    float kp = MAHONY_KP_STARTUP + t * (MAHONY_KP_STEADY - MAHONY_KP_STARTUP);
-    filter.setKp(kp);
+    baseKp = MAHONY_KP_STARTUP + t * (MAHONY_KP_STEADY - MAHONY_KP_STARTUP);
   } else {
-    filter.setKp(MAHONY_KP_STEADY);
+    baseKp = MAHONY_KP_STEADY;
   }
+
+  // --- ADAPTIVE ACCELEROMETER REJECTION ---
+  // When accel magnitude deviates from 1g, non-gravitational forces are present.
+  // Scale Kp down so the filter trusts gyro more during dynamic maneuvers.
+  float accelMag = sqrtf(ax * ax + ay * ay + az * az);
+  float deviation = fabsf(accelMag - ACCEL_1G) / ACCEL_1G;  // Fractional deviation from 1g
+
+  float kp;
+  if (deviation <= ACCEL_REJECT_SOFT) {
+    kp = baseKp;                                             // Normal operation
+  } else if (deviation >= ACCEL_REJECT_HARD) {
+    kp = ACCEL_REJECT_KP_MIN;                                // Full rejection (gyro-only)
+  } else {
+    // Linear interpolation between soft and hard thresholds
+    float t = (deviation - ACCEL_REJECT_SOFT) / (ACCEL_REJECT_HARD - ACCEL_REJECT_SOFT);
+    kp = baseKp + t * (ACCEL_REJECT_KP_MIN - baseKp);
+  }
+  filter.setKp(kp);
 
   // Convert gyro from rad/s → deg/s (Adafruit AHRS expects deg/s)
   float gx_dps = gx * SENSORS_RADS_TO_DPS;
@@ -454,6 +480,59 @@ void setup() {
   sox.setGyroRange(LSM6DS_GYRO_RANGE_2000_DPS);
   sox.setAccelDataRate(LSM6DS_RATE_208_HZ);   // Matches (slightly higher than) 200 Hz filter rate
   sox.setGyroDataRate(LSM6DS_RATE_208_HZ);
+
+  // --- Enable LSM6DSOX Hardware Digital Filters ---
+  // This datasheet is ridiculously time-consuming to read, implemented thanks to Aditya Prakash's guide:
+  // https://leibton.medium.com/communication-between-lsm6dsox-and-raspberry-pi-through-spi-97fe2e30432b
+  // Accel LP2: CTRL1_XL (0x10) bit 1 = LPF2_XL_EN, bandwidth set via CTRL8_XL
+  {
+    uint8_t ctrl1_xl;
+    Wire.beginTransmission(0x6A);
+    Wire.write(0x10);
+    Wire.endTransmission(false);
+    Wire.requestFrom((uint8_t)0x6A, (uint8_t)1);
+    ctrl1_xl = Wire.read();
+    ctrl1_xl |= 0x02;  // Set LPF2_XL_EN (bit 1)
+    Wire.beginTransmission(0x6A);
+    Wire.write(0x10);
+    Wire.write(ctrl1_xl);
+    Wire.endTransmission();
+  }
+  // CTRL8_XL (0x17): HP_SLOPE_XL_EN=0, HPCF_XL[2:0]=000 -> LP2 at ODR/4 (~52 Hz at 208 Hz ODR)
+  Wire.beginTransmission(0x6A);
+  Wire.write(0x17);
+  Wire.write(0x00);
+  Wire.endTransmission();
+
+  // Gyro LPF1 bandwidth: CTRL4_C (0x13) bit 1 = LPF1_SEL_G enables FTYPE bandwidth selection
+  {
+    uint8_t ctrl4_c;
+    Wire.beginTransmission(0x6A);
+    Wire.write(0x13);
+    Wire.endTransmission(false);
+    Wire.requestFrom((uint8_t)0x6A, (uint8_t)1);
+    ctrl4_c = Wire.read();
+    ctrl4_c |= 0x02;  // Set LPF1_SEL_G (bit 1)
+    Wire.beginTransmission(0x6A);
+    Wire.write(0x13);
+    Wire.write(ctrl4_c);
+    Wire.endTransmission();
+  }
+  // CTRL6_C (0x15): FTYPE[2:0]=101 -> 43.2 Hz LPF1 bandwidth at 208 Hz ODR (Table 67)
+  {
+    uint8_t ctrl6_c;
+    Wire.beginTransmission(0x6A);
+    Wire.write(0x15);
+    Wire.endTransmission(false);
+    Wire.requestFrom((uint8_t)0x6A, (uint8_t)1);
+    ctrl6_c = Wire.read();
+    ctrl6_c = (ctrl6_c & 0xF8) | 0x05;  // Clear FTYPE[2:0], set to 101
+    Wire.beginTransmission(0x6A);
+    Wire.write(0x15);
+    Wire.write(ctrl6_c);
+    Wire.endTransmission();
+  }
+  Serial.println("LSM6DSOX LP2 (accel ODR/4) + LPF1 (gyro 43 Hz) enabled");
 
   // --- Initialize LIS3MDL (magnetometer) ---
   if (!lis3mdl.begin_I2C()) {

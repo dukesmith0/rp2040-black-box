@@ -36,7 +36,7 @@ The first enclosure prototype is complete.
 | M3 6mm screws | 4 |
 | 50mm STEMMA QT cable | 3 |
 | 100mm STEMMA QT cable | 1 |
-| SD card (FAT32) | 1 |
+| 32GB SD card (FAT32) | 1 |
 | 3.3V battery (2-pin JST-PH) | 1 |
 
 ---
@@ -47,10 +47,14 @@ The first enclosure prototype is complete.
 rp2040-black-box/
 ├── firmware/
 │   ├── quat_datalogger/       # Dual-core Mahony AHRS + SD card logging
+│   ├── calibration/
+│   │   ├── magnetometer_calibration/  # MotionCal-compatible mag streaming
+│   │   └── accelerometer_calibration/ # Interactive 6-position accel cal
 │   └── test/
 │       └── sd_card_tester/    # SD card diagnostic tool
 ├── software/
-│   └── flight_visualizer/     # Python Streamlit web app
+│   ├── flight_visualizer/     # Python Streamlit web app
+│   └── matlab-visualizer/     # MATLAB trajectory & sensor plotter
 ├── data/
 │   └── samples/               # KITTI-derived test datasets
 └── hardware/
@@ -124,7 +128,14 @@ Dual-core flight data logger with real-time AHRS filtering and signal processing
 - GPS quality rejection (min satellites, max HDOP) with low-pass filtered speed/heading
 - Automatic file splitting every ~1 GB to stay under FAT32 4 GB limit
 
-All calibration constants and filter tuning parameters are editable at the top of the file.
+Calibration constants are loaded from `calibration.cfg` on the SD card at boot (see [Calibration](#calibration)). Filter tuning parameters are editable at the top of the firmware file.
+
+### Calibration Sketches
+
+Two standalone sketches in `firmware/calibration/` for computing sensor calibration values:
+
+- **magnetometer_calibration** — Streams `Raw:` / `Uni:` data over serial in the format expected by [MotionCal](https://www.pjrc.com/store/prop_shield.html). Rotate the device in all orientations until the sphere fills in, then copy the hard/soft iron values into `calibration.cfg`.
+- **accelerometer_calibration** — Interactive serial-guided 6-position calibration. Prompts you through each orientation, collects samples, and writes the computed offsets directly to `calibration.cfg` on the SD card.
 
 ### sd_card_tester
 
@@ -158,67 +169,60 @@ Diagnostic tool for verifying SD card compatibility. Tests initialization, read/
 
 ## Calibration
 
-All calibration constants are at the top of `firmware/quat_datalogger/quat_datalogger.ino`.
+Calibration values are stored in a `calibration.cfg` file on the SD card. The firmware reads this file at boot and applies the values automatically. If the file is missing, compiled defaults (zeros / identity) are used.
 
 ### 1. Gyroscope Bias (automatic)
 
 The firmware averages 500 samples at boot while stationary. Keep the device still for 5 seconds after power-on. The computed bias is printed to serial.
 
-To skip the wait, note the printed values and hardcode them:
+To skip the wait, note the printed values and hardcode them in the firmware:
 ```cpp
 static const bool GYRO_AUTO_CAL = false;
 static float gyro_bias[3] = { -0.0023f, 0.0041f, -0.0012f };
 ```
 
-### 2. Magnetometer Hard/Soft Iron (manual, critical)
+### 2. Magnetometer Hard/Soft Iron (critical for heading accuracy)
 
 This is the most important calibration. Without it, heading (yaw) will be unreliable.
 
-1. Log raw `mx, my, mz` values while slowly rotating the device through all orientations (figure-8 pattern, 60+ seconds)
-2. Feed the data into [MotionCal](https://www.pjrc.com/store/prop_shield.html) (free) to compute hard-iron offsets and soft-iron correction matrix
-3. Enter the values in the firmware:
-```cpp
-static const float MAG_HARD_IRON[3] = { offset_x, offset_y, offset_z };
-static const float MAG_SOFT_IRON[3][3] = {
-  { m00, m01, m02 },
-  { m10, m11, m12 },
-  { m20, m21, m22 }
-};
+1. Upload `firmware/calibration/magnetometer_calibration/` to the board
+2. Open [MotionCal](https://www.pjrc.com/store/prop_shield.html) and select the serial port
+3. Slowly rotate the device through all orientations (figure-8 pattern) until the sphere fills in
+4. Read the values from MotionCal and add them to a new file called `calibration.cfg` in the root of the SD card, using this format:
 ```
-4. Validate by plotting corrected mag data in 3D — it should form a sphere centered at the origin (not required but helpful for understanding of calibration)
-
-Do this calibration with the device in its final enclosure. Nearby metal and magnets affect the result.
-
-### 3. Accelerometer Offsets (manual)
-
-Six-position calibration:
-
-1. Place the device flat, on its back, on each of its four sides (6 orientations total)
-2. Record ~100 samples in each position
-3. For each axis, compute the offset as the midpoint of the two opposing readings (axis direction listed on board). It is recommended to use the serial monitor to copy data if possbile, as to prevent extra work from sifting through multiple CSV's:
+mag_hard_iron = <X>, <Y>, <Z>
+mag_soft_iron = <M00>, <M01>, <M02>, <M10>, <M11>, <M12>, <M20>, <M21>, <M22>
 ```
-offset_x = (ax_left + ax_right) / 2
-offset_y = (ay_nose_down + ay_nose_up) / 2
-offset_z = (az_flat + az_flipped) / 2
-```
-4. Enter the values:
-```cpp
-static const float ACCEL_OFFSET[3] = { offset_x, offset_y, offset_z };
-```
+
+Do this calibration with the device in its final enclosure. Nearby metal magnets, and mechanical stresses may affect the result.
+
+### 3. Accelerometer Offsets
+
+1. Upload `firmware/calibration/accelerometer_calibration/` to the board
+2. Open Serial Monitor at 115200 baud
+3. Follow the prompts: place the device in each of 6 orientations (X up/down, Y up/down, Z up/down) and press Enter
+4. Hold the device perfectly still during each 2-second measurement
+5. The computed offsets are automatically saved to `calibration.cfg` on the SD card
+
+The sketch preserves any existing entries (e.g., magnetometer values) in the config file.
 
 ### 4. Sea-Level Pressure (automatic)
 
 The firmware auto-calibrates from the first good GPS fix. No action needed.
 
-For manual override, set your local QNH from a weather service:
+For manual override, add to `calibration.cfg`:
+```
+sea_level_hpa = 1018.5
+```
+
+And optionally disable auto-cal in the firmware:
 ```cpp
-static float SEA_LEVEL_HPA = 1018.5f;
 static const bool BARO_GPS_AUTO_CAL = false;
 ```
 
 ### 5. Validation
 
-After calibrating, run these checks:
+After calibrating, run these checks on the quat_datalogger.ino firmware.
 
 | Test | Procedure | Expected Result |
 |------|-----------|-----------------|
@@ -228,9 +232,11 @@ After calibrating, run these checks:
 
 ---
 
-## Flight Visualizer
+## Visualization
 
-Interactive web-based visualization using Streamlit.
+### Flight Visualizer (Streamlit)
+
+Interactive web-based visualization.
 
 ```bash
 pip install streamlit pandas numpy plotly scipy
@@ -239,6 +245,24 @@ streamlit run app.py
 ```
 
 Live demo: **[rp2040-fdr-visualizer.streamlit.app](https://rp2040-fdr-visualizer.streamlit.app/)**
+
+### Trajectory Visualizer (MATLAB)
+
+Desktop visualization with satellite map overlays and sensor charts. Requires MATLAB (no additional toolboxes).
+
+```
+Open MATLAB → navigate to software/matlab-visualizer/ → run trajectoryvisualizer.m
+```
+
+A file picker dialog opens — select any 20-column CSV from `data/samples/` or from the SD card.
+
+**Displays:**
+- Summary statistics popup (duration, distance, speed, altitude range)
+- 2D GPS track on satellite basemap (color-coded by time)
+- 3D trajectory plot (North/East/Altitude in meters)
+- 4-panel sensor charts: Speed & Altitude, Quaternion, Accelerometer, Gyroscope
+
+The satellite basemap (`geobasemap('satellite')`) can be changed to `'streets'` or `'topographic'` by editing line 98.
 
 ---
 

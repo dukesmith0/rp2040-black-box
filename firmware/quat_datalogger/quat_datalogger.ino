@@ -30,12 +30,12 @@
 // Measured by rotating device in figure-8 and finding sphere center.
 // Use MotionCal (https://learn.adafruit.com/adafruit-sensorlab-magnetometer-calibration/magnetic-calibration-with-motioncal_)
 // or log raw mag data and compute in Python/MATLAB.
-static const float MAG_HARD_IRON[3] = { 0.0f, 0.0f, 0.0f };
+static float MAG_HARD_IRON[3] = { 0.0f, 0.0f, 0.0f };
 
 // --- Magnetometer Soft-Iron Matrix ---
 // Corrects ellipsoid distortion back to a sphere.
 // Identity matrix = no correction. Replace with your 3×3 result.
-static const float MAG_SOFT_IRON[3][3] = {
+static float MAG_SOFT_IRON[3][3] = {
   { 1.0f, 0.0f, 0.0f },
   { 0.0f, 1.0f, 0.0f },
   { 0.0f, 0.0f, 1.0f }
@@ -50,7 +50,7 @@ static float gyro_bias[3]              = { 0.0f, 0.0f, 0.0f };
 
 // --- Accelerometer Offsets (m/s²) ---
 // From 6-position calibration. Subtract from raw readings.
-static const float ACCEL_OFFSET[3] = { 0.0f, 0.0f, 0.0f };
+static float ACCEL_OFFSET[3] = { 0.0f, 0.0f, 0.0f };
 
 // --- Barometric Altitude ---
 // Set to local sea-level pressure (hPa) for accurate altitude.
@@ -226,6 +226,111 @@ void loop1() {
 //  CORE 0: Sensor Reading and Data Logging
 // ============================================================
 
+// --- Helper: Load calibration from SD card config file ---
+// Reads "calibration.cfg" from SD root. Falls back to compiled defaults if missing.
+// Format: key = value (comma-separated floats). Lines starting with # are comments.
+static const char* CAL_FILENAME = "calibration.cfg";
+
+static bool parseFloats(const char* str, float* out, int count) {
+  for (int i = 0; i < count; i++) {
+    char* end;
+    out[i] = strtof(str, &end);
+    if (end == str) return false; // parse failure
+    str = end;
+    // Skip comma and whitespace
+    while (*str == ',' || *str == ' ' || *str == '\t') str++;
+  }
+  return true;
+}
+
+static void loadCalibration() {
+  if (!SD.exists(CAL_FILENAME)) {
+    Serial.println("No calibration.cfg found, using defaults.");
+    return;
+  }
+
+  FsFile cfg = SD.open(CAL_FILENAME, FILE_READ);
+  if (!cfg) {
+    Serial.println("Failed to open calibration.cfg, using defaults.");
+    return;
+  }
+
+  Serial.println("Loading calibration.cfg...");
+  int loaded = 0;
+  char line[256];
+
+  while (cfg.available()) {
+    // Read one line
+    int len = 0;
+    while (cfg.available() && len < (int)sizeof(line) - 1) {
+      char c = cfg.read();
+      if (c == '\n') break;
+      if (c != '\r') line[len++] = c;
+    }
+    line[len] = '\0';
+
+    // Skip empty lines and comments
+    if (len == 0 || line[0] == '#') continue;
+
+    // Find '=' separator
+    char* eq = strchr(line, '=');
+    if (!eq) continue;
+
+    // Split key and value
+    *eq = '\0';
+    char* key = line;
+    char* val = eq + 1;
+
+    // Trim trailing spaces from key
+    char* kend = eq - 1;
+    while (kend > key && (*kend == ' ' || *kend == '\t')) *kend-- = '\0';
+
+    // Trim leading spaces from value
+    while (*val == ' ' || *val == '\t') val++;
+
+    // Match keys
+    if (strcmp(key, "mag_hard_iron") == 0) {
+      if (parseFloats(val, MAG_HARD_IRON, 3)) {
+        Serial.print("  mag_hard_iron = ");
+        Serial.print(MAG_HARD_IRON[0], 4); Serial.print(", ");
+        Serial.print(MAG_HARD_IRON[1], 4); Serial.print(", ");
+        Serial.println(MAG_HARD_IRON[2], 4);
+        loaded++;
+      }
+    } else if (strcmp(key, "mag_soft_iron") == 0) {
+      float flat[9];
+      if (parseFloats(val, flat, 9)) {
+        for (int r = 0; r < 3; r++)
+          for (int c = 0; c < 3; c++)
+            MAG_SOFT_IRON[r][c] = flat[r * 3 + c];
+        Serial.println("  mag_soft_iron = (3x3 matrix loaded)");
+        loaded++;
+      }
+    } else if (strcmp(key, "accel_offset") == 0) {
+      if (parseFloats(val, ACCEL_OFFSET, 3)) {
+        Serial.print("  accel_offset = ");
+        Serial.print(ACCEL_OFFSET[0], 4); Serial.print(", ");
+        Serial.print(ACCEL_OFFSET[1], 4); Serial.print(", ");
+        Serial.println(ACCEL_OFFSET[2], 4);
+        loaded++;
+      }
+    } else if (strcmp(key, "sea_level_hpa") == 0) {
+      float v;
+      if (parseFloats(val, &v, 1) && v > 800.0f && v < 1200.0f) {
+        SEA_LEVEL_HPA = v;
+        Serial.print("  sea_level_hpa = ");
+        Serial.println(SEA_LEVEL_HPA, 2);
+        loaded++;
+      }
+    }
+  }
+
+  cfg.close();
+  Serial.print("Calibration loaded (");
+  Serial.print(loaded);
+  Serial.println(" values).");
+}
+
 // --- Helper, build split filename ---
 static String buildFileName() {
   return fileBaseName + "_" + String(fileSplitIndex) + fileExt;
@@ -323,7 +428,8 @@ static float lerpAngle(float filtered, float raw, float alpha) {
   return result;
 }
 
-// Setup is about 5-6 seconds, KEEP STILL DURING THIS if GYRO_AUTO_CAL is enabled 
+// Setup is about 5-6 seconds, KEEP STILL DURING THIS if GYRO_AUTO_CAL is enabled
+void setup() {
   Serial.begin(115200);
 
   Wire.begin();
@@ -398,6 +504,9 @@ static float lerpAngle(float filtered, float raw, float alpha) {
 
   if (retries < 5) {
     Serial.println(" OK");
+
+    // Load calibration from SD card (before logging starts)
+    loadCalibration();
 
     // Build base filename from RTC or sequential fallback
     if (rtcValid) {
@@ -479,8 +588,9 @@ void loop() {
   baroTickCount++;
   if (baroTickCount >= BARO_DECIMATION) {
     baroTickCount = 0;
-    bmp.performReading();
-    lastBaroAlt = bmp.readAltitude(SEA_LEVEL_HPA);
+    if (bmp.performReading()) {
+      lastBaroAlt = 44330.0f * (1.0f - powf((bmp.pressure / 100.0f) / SEA_LEVEL_HPA, 0.1903f));
+    }
   }
 
   // ---- ALTITUDE LOW-PASS FILTER ----
@@ -502,12 +612,15 @@ void loop() {
       // Reverse the barometric formula: P0 = P / (1 - alt/44330)^5.255 , thanks to Wikipedia
       float rawPressure = bmp.pressure / 100.0f;  // Pa to hPa
       float ratio = 1.0f - (gpsAlt / 44330.0f);
-      if (ratio > 0.0f) {
-        SEA_LEVEL_HPA = rawPressure / powf(ratio, 5.255f);
-        baroPressureCaled = true;
-        Serial.print("Baro auto-cal: sea level = ");
-        Serial.print(SEA_LEVEL_HPA, 2);
-        Serial.println(" hPa");
+      if (ratio > 0.0f && rawPressure > 300.0f && rawPressure < 1200.0f) {
+        float calP0 = rawPressure / powf(ratio, 5.255f);
+        if (calP0 > 800.0f && calP0 < 1200.0f) {
+          SEA_LEVEL_HPA = calP0;
+          baroPressureCaled = true;
+          Serial.print("Baro auto-cal: sea level = ");
+          Serial.print(SEA_LEVEL_HPA, 2);
+          Serial.println(" hPa");
+        }
       }
     }
   }

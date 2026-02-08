@@ -171,6 +171,10 @@ Diagnostic tool for verifying SD card compatibility. Tests initialization, read/
 
 Calibration values are stored in a `calibration.cfg` file on the SD card. The firmware reads this file at boot and applies the values automatically. If the file is missing, compiled defaults (zeros / identity) are used.
 
+### 0. RTC (automatic)
+
+The PCF8523 real-time clock is set automatically when the firmware detects a computer connected via USB (e.g., right after uploading the sketch). It sets the RTC to the compile timestamp, which is accurate to within a few seconds of the current time. When running on battery without a computer, the RTC keeps its existing time and is not overwritten.
+
 ### 1. Gyroscope Bias (automatic)
 
 The firmware averages 500 samples at boot while stationary. Keep the device still for 5 seconds after power-on. The computed bias is printed to serial.

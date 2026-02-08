@@ -479,11 +479,32 @@ void setup() {
   // --- Initialize RTC ---
   if (!rtc.begin()) {
     Serial.println("RTC not found");
-  } else if (!rtc.initialized() || rtc.lostPower()) {
-    Serial.println("RTC not set, using fallback naming");
   } else {
-    rtcValid = true;
-    Serial.println("RTC initialized");
+    // If a computer is connected via USB and the RTC needs setting,
+    // set it to the compile timestamp (accurate right after upload).
+    // Wait briefly for USB to enumerate — on battery this times out quickly.
+    if (!rtc.initialized() || rtc.lostPower()) {
+      uint32_t usbWaitStart = millis();
+      while (!Serial && (millis() - usbWaitStart < 2000)) delay(10);
+
+      if (Serial) {
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        rtc.start();
+        Serial.println("RTC set to compile time (USB detected).");
+      } else {
+        Serial.println("RTC not set, using fallback naming");
+      }
+    }
+
+    if (rtc.initialized() && !rtc.lostPower()) {
+      rtcValid = true;
+      DateTime now = rtc.now();
+      char ts[30];
+      snprintf(ts, sizeof(ts), "RTC: %04d-%02d-%02d %02d:%02d:%02d",
+               now.year(), now.month(), now.day(),
+               now.hour(), now.minute(), now.second());
+      Serial.println(ts);
+    }
   }
 
   // --- Initialize SD Card ---

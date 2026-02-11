@@ -22,9 +22,10 @@ Flight data logging system using an Adafruit RP2040 microcontroller to capture I
 
 ### Enclosure
 
-The first enclosure prototype is complete.
+The second enclosure revision features a full case for better protection and improved battery mounting.
 
-![Enclosure R1 assembled](images/enclosure_r1_assembled.jpg)
+![Enclosure R2 external](images/enclosure-r2-external.jpeg)
+![Enclosure R2 internal](images/enclosure-r2-internal.jpeg)
 
 | Part | Quantity |
 |------|----------|
@@ -313,3 +314,13 @@ Select a serial port and baud rate (default 115200) when prompted. The figure up
 - Predict remaining battery life based on flight behavior patterns
 - Auto-label flight phases (takeoff, cruise, landing, idle) from sensor signatures
 - Anomaly detection to flag unusual vibration or orientation patterns
+
+---
+
+## Previous Iterations
+
+### Enclosure R1
+
+The first enclosure prototype — open-top design with standoff-mounted boards.
+
+![Enclosure R1 assembled](images/enclosure_r1_assembled.jpg)

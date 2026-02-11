@@ -38,7 +38,7 @@ static bool sdReady = false;
 
 static const char* CAL_FILENAME = "calibration.cfg";
 
-static const int   CAL_SAMPLES   = 200;   // Samples per orientation
+static const int   CAL_SAMPLES   = 500;   // Samples per orientation
 static const int   SAMPLE_DELAY  = 10;    // ms between samples (~100 Hz)
 static const int   SETTLE_TIME   = 500;   // ms to let sensor settle after user confirms
 

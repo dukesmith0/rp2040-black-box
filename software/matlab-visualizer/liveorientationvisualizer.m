@@ -20,15 +20,23 @@ for i = 1:length(ports)
     fprintf('  [%d] %s\n', i, ports(i));
 end
 
-portIdx = input(sprintf('\nSelect port [1-%d]: ', length(ports)));
+fprintf('\nSelect port [1-%d]: ', length(ports));
+portIdx = input('');
 if isempty(portIdx) || portIdx < 1 || portIdx > length(ports)
     error('Invalid selection.');
 end
 selectedPort = ports(portIdx);
 
-baudRate = input('Baud rate [115200]: ');
-if isempty(baudRate)
+fprintf('\nBaud rate:\n');
+fprintf('  [1] 115200 (default)\n');
+fprintf('  [2] Custom\n');
+fprintf('Select [1-2]: ');
+baudChoice = input('');
+if isempty(baudChoice) || baudChoice == 1
     baudRate = 115200;
+else
+    fprintf('Enter baud rate: ');
+    baudRate = input('');
 end
 
 %% --- Connect Serial ---
@@ -43,11 +51,36 @@ flush(s);
 
 fprintf('Connected. Close the figure window to stop.\n\n');
 
+%% --- Mesh Selection ---
+meshDir = fullfile(fileparts(mfilename('fullpath')), 'visualizer_placeholders');
+meshFiles = dir(fullfile(meshDir, '*.stl'));
+
+fprintf('\nVisualization mesh:\n');
+fprintf('  [1] Default (poseplot built-in)\n');
+for i = 1:length(meshFiles)
+    fprintf('  [%d] %s\n', i + 1, meshFiles(i).name);
+end
+fprintf('Select mesh [1-%d]: ', length(meshFiles) + 1);
+meshChoice = input('');
+if isempty(meshChoice)
+    meshChoice = 1;
+end
+
 %% --- Setup Poseplot Figure ---
 fig = figure('Name', 'Live Orientation', 'NumberTitle', 'off', ...
              'Position', [300 200 700 600]);
 
-p = poseplot(quaternion(1, 0, 0, 0));
+if meshChoice >= 2 && meshChoice <= length(meshFiles) + 1
+    stlFile = fullfile(meshDir, meshFiles(meshChoice - 1).name);
+    p = poseplot(quaternion(1, 0, 0, 0), [0 0 0], ...
+                 'MeshFileName', stlFile, 'ScaleFactor', 0.5);
+else
+    p = poseplot(quaternion(1, 0, 0, 0));
+end
+
+% 180° rotation about X to correct +Y and +Z alignment to enclosure
+qMeshFix = quaternion(0, 1, 0, 0);
+
 set(gca, 'ZDir', 'reverse');
 xlabel('X');
 ylabel('Y');
@@ -88,8 +121,8 @@ while isvalid(fig)
     qy = -values(4);
     qz = -values(5);
 
-    % Update poseplot
-    set(p, 'Orientation', quaternion(qw, qx, qy, qz));
+    % Update poseplot (apply mesh axis correction)
+    set(p, 'Orientation', quaternion(qw, qx, qy, qz) * qMeshFix);
     drawnow limitrate;
 end
 

@@ -15,7 +15,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "SdFat.h"
-#include <RTClib.h>
+// #include <RTClib.h>  // RTC removed from hardware
 #include <Adafruit_BMP3XX.h>
 #include <Adafruit_LSM6DSOX.h>
 #include <Adafruit_LIS3MDL.h>
@@ -115,7 +115,7 @@ Adafruit_BMP3XX   bmp;
 Adafruit_LSM6DSOX sox;
 Adafruit_LIS3MDL  lis3mdl;
 Adafruit_GPS      GPS_sensor(&Wire);
-RTC_PCF8523       rtc;
+// RTC_PCF8523       rtc;  // RTC removed from hardware
 Adafruit_Mahony   filter;
 
 // SD card setup from Adafruit RP2040 Adalogger: CS pin 23, SPI1
@@ -376,7 +376,8 @@ static bool openLogFile() {
     return false;
   }
 
-  // Write header if rtc working
+  // Write header if rtc working (RTC removed from hardware)
+  /*
   if (rtcValid) {
     DateTime now = rtc.now();
     char ts[40];
@@ -385,6 +386,7 @@ static bool openLogFile() {
              now.hour(), now.minute(), now.second());
     logFile.println(ts);
   }
+  */
   // Header line for CSV columns
   logFile.println("ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
   logFile.flush(); // ensure header is written immediately
@@ -457,6 +459,8 @@ static float lerpAngle(float filtered, float raw, float alpha) {
 // Setup is about 5-6 seconds, KEEP STILL DURING THIS if GYRO_AUTO_CAL is enabled
 void setup() {
   Serial.begin(115200);
+  while (!Serial && millis() < 3000) delay(10);  // Wait for USB serial (timeout for battery operation)
+  Serial.println("RP2040 Black Box starting...");
 
   Wire.begin();
   Wire.setClock(400000); // 400 kHz I2C for potential faster sensor reads
@@ -555,7 +559,8 @@ void setup() {
   GPS_sensor.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
   GPS_sensor.sendCommand(PGCMD_ANTENNA);
 
-  // --- Initialize RTC ---
+  // --- Initialize RTC --- (RTC removed from hardware)
+  /*
   if (!rtc.begin()) {
     Serial.println("RTC not found");
   } else {
@@ -585,6 +590,7 @@ void setup() {
       Serial.println(ts);
     }
   }
+  */
 
   // --- Initialize SD Card ---
   Serial.print("Initializing SD card...");
@@ -608,21 +614,21 @@ void setup() {
     // Load calibration from SD card (before logging starts)
     loadCalibration();
 
-    // Build base filename from RTC or sequential fallback
-    if (rtcValid) {
-      DateTime now = rtc.now();
-      char buf[20];
-      snprintf(buf, sizeof(buf), "%04d%02d%02d_%02d%02d%02d",
-               now.year(), now.month(), now.day(),
-               now.hour(), now.minute(), now.second());
-      fileBaseName = String(buf);
-    } else {
-      for (int i = 0; i < 1000; i++) {
-        fileBaseName = "log" + String(i);
-        String test = fileBaseName + "_0" + fileExt;
-        if (!SD.exists(test.c_str())) break;
-      }
+    // Build base filename (sequential fallback, RTC removed from hardware)
+    // if (rtcValid) {
+    //   DateTime now = rtc.now();
+    //   char buf[20];
+    //   snprintf(buf, sizeof(buf), "%04d%02d%02d_%02d%02d%02d",
+    //            now.year(), now.month(), now.day(),
+    //            now.hour(), now.minute(), now.second());
+    //   fileBaseName = String(buf);
+    // } else {
+    for (int i = 0; i < 1000; i++) {
+      fileBaseName = "log" + String(i);
+      String test = fileBaseName + "_0" + fileExt;
+      if (!SD.exists(test.c_str())) break;
     }
+    // }
 
     fileSplitIndex = 0;
     openLogFile();

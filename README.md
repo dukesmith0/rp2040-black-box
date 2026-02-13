@@ -52,6 +52,7 @@ rp2040-black-box/
 │   │   ├── magnetometer_calibration/  # MotionCal-compatible mag streaming
 │   │   └── accelerometer_calibration/ # Interactive 6-position accel cal
 │   └── test/
+│       ├── diagnostic/        # Serial & sensor diagnostic tool
 │       └── sd_card_tester/    # SD card diagnostic tool
 ├── software/
 │   ├── flight_visualizer/     # Python Streamlit web app
@@ -139,6 +140,10 @@ Two standalone sketches in `firmware/calibration/` for computing sensor calibrat
 
 - **magnetometer_calibration** — Streams `Raw:` / `Uni:` data over serial in the format expected by [MotionCal](https://www.pjrc.com/store/prop_shield.html). Rotate the device in all orientations until the sphere fills in, then copy the hard/soft iron values into `calibration.cfg`.
 - **accelerometer_calibration** — Interactive serial-guided 6-position calibration. Prompts you through each orientation, collects samples, and writes the computed offsets directly to `calibration.cfg` on the SD card.
+
+### diagnostic
+
+Serial and sensor diagnostic tool that tests each I2C sensor individually with detailed bus diagnostics. Upload and open Serial Monitor at 115200 baud to verify all sensors are detected and responding correctly.
 
 ### sd_card_tester
 

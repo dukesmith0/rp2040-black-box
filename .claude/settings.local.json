@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(del \"c:\\\\Users\\\\craigs\\\\Documents\\\\vscode_projects\\\\rp2040-black-box\\\\firmware\\\\quat_datalogger\\\\serial_test.ino\")"
-    ]
-  }
-}

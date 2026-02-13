@@ -15,7 +15,6 @@
 #include <Wire.h>
 #include <SPI.h>
 #include "SdFat.h"
-// #include <RTClib.h>  // RTC removed from hardware
 #include <Adafruit_BMP3XX.h>
 #include <Adafruit_LSM6DSOX.h>
 #include <Adafruit_LIS3MDL.h>
@@ -115,7 +114,6 @@ Adafruit_BMP3XX   bmp;
 Adafruit_LSM6DSOX sox;
 Adafruit_LIS3MDL  lis3mdl;
 Adafruit_GPS      GPS_sensor(&Wire);
-// RTC_PCF8523       rtc;  // RTC removed from hardware
 Adafruit_Mahony   filter;
 
 // SD card setup from Adafruit RP2040 Adalogger: CS pin 23, SPI1
@@ -149,11 +147,12 @@ volatile FilterOutput filterOutput = { 1.0f, 0, 0, 0, false };
 //  CORE 0 STATE
 // ============================================================
 
-static String   fileBaseName    = "data"; // default naming convention for output files (overridden by RTC if available)
+static String   fileBaseName    = "data"; // default naming convention for output files (overridden by GPS time if available)
 static String   fileExt         = ".csv"; // defines output file extension
 static int      fileSplitIndex  = 0; // number of times file has been split
 static uint32_t bytesWritten    = 0; // track bytes for splitting
-static bool     rtcValid        = false; // see if RTC time can be used for filename generation
+static bool     gpsTimeValid    = false; // GPS battery-backed RTC time available for filenames
+static char     gpsTimestamp[20] = "";   // cached "YYYYMMDD_HHMMSS" from GPS RTC
 
 // Timing
 static uint32_t lastSampleTime  = 0; // For main loop timing, filter update rate
@@ -376,17 +375,14 @@ static bool openLogFile() {
     return false;
   }
 
-  // Write header if rtc working (RTC removed from hardware)
-  /*
-  if (rtcValid) {
-    DateTime now = rtc.now();
-    char ts[40];
-    snprintf(ts, sizeof(ts), "# Start: %04d-%02d-%02dT%02d:%02d:%02d",
-             now.year(), now.month(), now.day(),
-             now.hour(), now.minute(), now.second());
+  // Write timestamp header from GPS RTC if available
+  if (gpsTimeValid) {
+    char ts[50];
+    snprintf(ts, sizeof(ts), "# Start: %.4s-%.2s-%.2sT%.2s:%.2s:%.2s UTC",
+             gpsTimestamp, gpsTimestamp + 4, gpsTimestamp + 6,
+             gpsTimestamp + 9, gpsTimestamp + 11, gpsTimestamp + 13);
     logFile.println(ts);
   }
-  */
   // Header line for CSV columns
   logFile.println("ms,qw,qx,qy,qz,ax,ay,az,gx,gy,gz,mx,my,mz,alt,gps_fix,lat,lon,speed,heading");
   logFile.flush(); // ensure header is written immediately
@@ -559,38 +555,33 @@ void setup() {
   GPS_sensor.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ);
   GPS_sensor.sendCommand(PGCMD_ANTENNA);
 
-  // --- Initialize RTC --- (RTC removed from hardware)
-  /*
-  if (!rtc.begin()) {
-    Serial.println("RTC not found");
-  } else {
-    // If a computer is connected via USB and the RTC needs setting,
-    // set it to the compile timestamp (accurate right after upload).
-    // Wait briefly for USB to enumerate — on battery this times out quickly.
-    if (!rtc.initialized() || rtc.lostPower()) {
-      uint32_t usbWaitStart = millis();
-      while (!Serial && (millis() - usbWaitStart < 2000)) delay(10);
-
-      if (Serial) {
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-        rtc.start();
-        Serial.println("RTC set to compile time (USB detected).");
-      } else {
-        Serial.println("RTC not set, using fallback naming");
+  // --- Poll GPS for battery-backed RTC time ---
+  // The PA1010D has a built-in battery, so after the first satellite fix ever,
+  // it retains UTC time across resets. Poll briefly for valid time data.
+  {
+    Serial.print("Waiting for GPS time...");
+    uint32_t gpsWaitStart = millis();
+    while (millis() - gpsWaitStart < 3000) {
+      GPS_sensor.read();
+      if (GPS_sensor.newNMEAreceived()) {
+        GPS_sensor.parse(GPS_sensor.lastNMEA());
+        // Year > 0 means the GPS RTC has valid time (NMEA year is 2-digit, 0 = no time)
+        if (GPS_sensor.year > 0) {
+          snprintf(gpsTimestamp, sizeof(gpsTimestamp), "%04d%02d%02d_%02d%02d%02d",
+                   GPS_sensor.year + 2000, GPS_sensor.month, GPS_sensor.day,
+                   GPS_sensor.hour, GPS_sensor.minute, GPS_sensor.seconds);
+          gpsTimeValid = true;
+          Serial.print(" OK (");
+          Serial.print(gpsTimestamp);
+          Serial.println(" UTC)");
+          break;
+        }
       }
     }
-
-    if (rtc.initialized() && !rtc.lostPower()) {
-      rtcValid = true;
-      DateTime now = rtc.now();
-      char ts[30];
-      snprintf(ts, sizeof(ts), "RTC: %04d-%02d-%02d %02d:%02d:%02d",
-               now.year(), now.month(), now.day(),
-               now.hour(), now.minute(), now.second());
-      Serial.println(ts);
+    if (!gpsTimeValid) {
+      Serial.println(" no time available, using sequential naming");
     }
   }
-  */
 
   // --- Initialize SD Card ---
   Serial.print("Initializing SD card...");
@@ -614,21 +605,16 @@ void setup() {
     // Load calibration from SD card (before logging starts)
     loadCalibration();
 
-    // Build base filename (sequential fallback, RTC removed from hardware)
-    // if (rtcValid) {
-    //   DateTime now = rtc.now();
-    //   char buf[20];
-    //   snprintf(buf, sizeof(buf), "%04d%02d%02d_%02d%02d%02d",
-    //            now.year(), now.month(), now.day(),
-    //            now.hour(), now.minute(), now.second());
-    //   fileBaseName = String(buf);
-    // } else {
-    for (int i = 0; i < 1000; i++) {
-      fileBaseName = "log" + String(i);
-      String test = fileBaseName + "_0" + fileExt;
-      if (!SD.exists(test.c_str())) break;
+    // Build base filename from GPS time, or fall back to sequential naming
+    if (gpsTimeValid) {
+      fileBaseName = String(gpsTimestamp);
+    } else {
+      for (int i = 0; i < 1000; i++) {
+        fileBaseName = "log" + String(i);
+        String test = fileBaseName + "_0" + fileExt;
+        if (!SD.exists(test.c_str())) break;
+      }
     }
-    // }
 
     fileSplitIndex = 0;
     openLogFile();

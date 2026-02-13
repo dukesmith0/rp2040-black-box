@@ -11,13 +11,11 @@ Flight data logging system using an Adafruit RP2040 microcontroller to capture I
 | Adafruit LSM6DSOX | 6-DOF accelerometer/gyroscope (208Hz) |
 | Adafruit LIS3MDL | 3-axis magnetometer (155Hz) |
 | Adafruit Mini GPS PA1010D | GPS module (10Hz) |
-| Adafruit PCF8523 | Real-time clock |
 
 ### Hardware Guides
 - [Adafruit Feather RP2040 Adalogger](https://learn.adafruit.com/adafruit-feather-rp2040-adalogger/overview)
 - [Adafruit BMP390](https://learn.adafruit.com/adafruit-bmp388-bmp390-bmp3xx/overview)
 - [Adafruit Mini GPS PA1010D](https://learn.adafruit.com/adafruit-mini-gps-pa1010d-module/overview)
-- [Adafruit PCF8523 RTC](https://learn.adafruit.com/adafruit-pcf8523-real-time-clock/overview)
 - [Adafruit LSM6DSOX + LIS3MDL 9-DOF](https://learn.adafruit.com/st-9-dof-combo/overview)
 
 ### Enclosure
@@ -36,9 +34,27 @@ The second enclosure revision features a full case for better protection and imp
 | M3 6mm standoffs | 4 |
 | M3 6mm screws | 4 |
 | 50mm STEMMA QT cable | 3 |
-| 100mm STEMMA QT cable | 1 |
 | 32GB SD card (FAT32) | 1 |
-| 3.3V battery (2-pin JST-PH) | 1 |
+| 3.7V 2000mAh LiPo battery (2-pin JST-PH) | 1 |
+| Hot glue | - |
+
+### Estimated Cost
+
+| Item | Est. Price |
+|------|-----------|
+| Adafruit Feather RP2040 Adalogger | $14.95 |
+| Adafruit BMP390 | $10.95 |
+| Adafruit LSM6DSOX + LIS3MDL 9-DOF IMU | $19.95 |
+| Adafruit Mini GPS PA1010D | $29.95 |
+| STEMMA QT 50mm cables (×3) | $2.85 |
+| 32GB microSD card | ~$8 |
+| 3.7V 2000mAh LiPo battery | $12.50 |
+| 3D printed enclosure (PLA filament) | ~$3 |
+| M2.5/M3 hardware (heat inserts, standoffs, screws) | ~$10 |
+| Hot glue | ~$1 |
+| **Total** | **~$113** |
+
+> Prices based on Adafruit retail (single-unit) as of early 2026. SD card and hardware prices vary by vendor.
 
 ---
 
@@ -89,7 +105,6 @@ Install via Library Manager (Tools > Manage Libraries):
 | **SdFat** | SD card operations |
 | **Adafruit BMP3XX** | BMP390 altimeter |
 | **Adafruit GPS Library** | PA1010D GPS |
-| **RTClib** | PCF8523 real-time clock |
 | **Adafruit LIS3MDL** | Magnetometer |
 | **Adafruit LSM6DSOX** | Accelerometer/Gyroscope |
 | **Adafruit AHRS** | Mahony sensor fusion |
@@ -125,7 +140,7 @@ Dual-core flight data logger with real-time AHRS filtering and signal processing
 **Core 0** reads sensors and logs to SD at 100Hz. **Core 1** runs the Mahony AHRS filter at 200Hz.
 
 **Signal processing pipeline:**
-- Adaptive Mahony filter (Kp ramps 10.0 → 1.5, Ki = 0.01 for drift correction)
+- Adaptive Mahony filter (Kp ramps 10.0 → 1.0, Ki = 0.008 for drift correction)
 - Sensor calibration: magnetometer hard/soft iron, gyro auto-cal at boot, accelerometer offsets
 - Altitude: BMP390 hardware IIR → software low-pass filter → GPS complementary filter
 - Auto sea-level pressure calibration from first good GPS fix
@@ -168,10 +183,10 @@ Diagnostic tool for verifying SD card compatibility. Tests initialization, read/
 | speed | Filtered GPS speed | knots |
 | heading | Filtered GPS heading | degrees |
 
-**File naming:**
-- RTC available: `20260130_143022_0.csv`, `..._1.csv`, `..._2.csv`
-- RTC unavailable: `log0_0.csv`, `log0_1.csv`, ...
-- Header: `# Start: YYYY-MM-DDTHH:MM:SS`
+**File naming:** Timestamps use UTC from the GPS module's battery-backed RTC.
+- GPS time available: `20260130_143022_0.csv`, `..._1.csv`, `..._2.csv`
+- GPS time unavailable: `log0_0.csv`, `log0_1.csv`, ...
+- Header: `# Start: YYYY-MM-DDTHH:MM:SS UTC`
 
 ---
 
@@ -179,11 +194,7 @@ Diagnostic tool for verifying SD card compatibility. Tests initialization, read/
 
 Calibration values are stored in a `calibration.cfg` file on the SD card. The firmware reads this file at boot and applies the values automatically. If the file is missing, compiled defaults (zeros / identity) are used.
 
-### 0. RTC (automatic)
-
-The PCF8523 real-time clock is set automatically when the firmware detects a computer connected via USB (e.g., right after uploading the sketch). It sets the RTC to the compile timestamp, which is accurate to within a few seconds of the current time. When running on battery without a computer, the RTC keeps its existing time and is not overwritten.
-
-### 1. Gyroscope Bias (automatic)
+### 0. Gyroscope Bias (automatic)
 
 The firmware averages 500 samples at boot while stationary. Keep the device still for 5 seconds after power-on. The computed bias is printed to serial.
 
@@ -193,7 +204,7 @@ static const bool GYRO_AUTO_CAL = false;
 static float gyro_bias[3] = { -0.0023f, 0.0041f, -0.0012f };
 ```
 
-### 2. Magnetometer Hard/Soft Iron (critical for heading accuracy)
+### 1. Magnetometer Hard/Soft Iron (critical for heading accuracy)
 
 This is the most important calibration. Without it, heading (yaw) will be unreliable.
 
@@ -208,7 +219,7 @@ mag_soft_iron = <M00>, <M01>, <M02>, <M10>, <M11>, <M12>, <M20>, <M21>, <M22>
 
 Do this calibration with the device in its final enclosure. Nearby metal magnets, and mechanical stresses may affect the result.
 
-### 3. Accelerometer Offsets
+### 2. Accelerometer Offsets
 
 1. Upload `firmware/calibration/accelerometer_calibration/` to the board
 2. Open Serial Monitor at 115200 baud
@@ -218,7 +229,7 @@ Do this calibration with the device in its final enclosure. Nearby metal magnets
 
 The sketch preserves any existing entries (e.g., magnetometer values) in the config file.
 
-### 4. Sea-Level Pressure (automatic)
+### 3. Sea-Level Pressure (automatic)
 
 The firmware auto-calibrates from the first good GPS fix. No action needed.
 
@@ -232,7 +243,7 @@ And optionally disable auto-cal in the firmware:
 static const bool BARO_GPS_AUTO_CAL = false;
 ```
 
-### 5. Validation
+### 4. Validation
 
 After calibrating, run these checks on the quat_datalogger.ino firmware.
 

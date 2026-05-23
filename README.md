@@ -58,29 +58,6 @@ The second enclosure revision features a full case for better protection and imp
 
 ---
 
-## Project Structure
-
-```
-rp2040-black-box/
-├── firmware/
-│   ├── quat_datalogger/       # Dual-core Mahony AHRS + SD card logging
-│   ├── calibration/
-│   │   ├── magnetometer_calibration/  # MotionCal-compatible mag streaming
-│   │   └── accelerometer_calibration/ # Interactive 6-position accel cal
-│   └── test/
-│       ├── diagnostic/        # Serial & sensor diagnostic tool
-│       └── sd_card_tester/    # SD card diagnostic tool
-├── software/
-│   ├── flight_visualizer/     # Python Streamlit web app
-│   └── matlab-visualizer/     # MATLAB trajectory plotter & live orientation viewer
-├── data/
-│   └── samples/               # KITTI-derived test datasets
-└── hardware/
-    └── boards/                # STEP files and fab prints
-```
-
----
-
 ## Getting Started
 
 ### Arduino Setup
@@ -153,8 +130,8 @@ Calibration constants are loaded from `calibration.cfg` on the SD card at boot (
 
 Two standalone sketches in `firmware/calibration/` for computing sensor calibration values:
 
-- **magnetometer_calibration** — Streams `Raw:` / `Uni:` data over serial in the format expected by [MotionCal](https://www.pjrc.com/store/prop_shield.html). Rotate the device in all orientations until the sphere fills in, then copy the hard/soft iron values into `calibration.cfg`.
-- **accelerometer_calibration** — Interactive serial-guided 6-position calibration. Prompts you through each orientation, collects samples, and writes the computed offsets directly to `calibration.cfg` on the SD card.
+- **magnetometer_calibration**: Streams `Raw:` / `Uni:` data over serial in the format expected by [MotionCal](https://www.pjrc.com/store/prop_shield.html). Rotate the device in all orientations until the sphere fills in, then copy the hard/soft iron values into `calibration.cfg`.
+- **accelerometer_calibration**: Interactive serial-guided 6-position calibration. Prompts you through each orientation, collects samples, and writes the computed offsets directly to `calibration.cfg` on the SD card.
 
 ### diagnostic
 
@@ -278,10 +255,10 @@ Desktop visualization with satellite map overlays, dead reckoning, and sensor ch
 ![Matlab Visualization](images/matlab_visualization.png)
 
 ```
-Open MATLAB → navigate to software/matlab-visualizer/ → run trajectoryvisualizer.m
+Open MATLAB, navigate to software/matlab-visualizer/, run trajectoryvisualizer.m
 ```
 
-A file picker dialog opens — select any 20-column CSV from `data/samples/` or from the SD card.
+A file picker dialog opens. Select any 20-column CSV from `data/samples/` or from the SD card.
 
 **Displays:**
 - Summary statistics popup (duration, distance, speed, altitude range)
@@ -298,7 +275,7 @@ Real-time 3D orientation display from live serial data. Connects to the RP2040 o
 ![Live Orientation](images/liveorientation.gif)
 
 ```
-Open MATLAB → navigate to software/matlab-visualizer/ → run liveorientationvisualizer.m
+Open MATLAB, navigate to software/matlab-visualizer/, run liveorientationvisualizer.m
 ```
 
 Select a serial port and baud rate (default 115200) when prompted. The figure updates in real time as the device streams quaternion data. Close the figure window to disconnect.
@@ -314,7 +291,7 @@ Select a serial port and baud rate (default 115200) when prompted. The figure up
 - Upgrade GPS module to use a larger antenna for better signal
 - Design custom PCB integrating RP2040 and all sensors onto a single board
 - Add Bluetooth for wireless flight data streaming
-- **Consider BNO085 IMU**: Replace LSM6DSOX + LIS3MDL with BNO085 for onboard hardware EKF fusion — reduces CPU load with hardware-accelerated quaternion output and automatic calibration
+- **Consider BNO085 IMU**: Replace LSM6DSOX + LIS3MDL with BNO085 for onboard hardware EKF fusion, reducing CPU load with hardware-accelerated quaternion output and automatic calibration
 
 ### Power & Monitoring
 - Optimize battery usage and create power consumption metrics
@@ -323,20 +300,12 @@ Select a serial port and baud rate (default 115200) when prompted. The figure up
 ### Software
 - Add Simulink visualization for real-time 3D flight simulation and analysis
 
-### AI Integration
-- Transition to an AI-optimized microcontroller for on-device inference
-- AI-enhanced dead reckoning to reduce position drift when GPS is unavailable
-- Altitude fusion model to correct for local pressure variations
-- Predict remaining battery life based on flight behavior patterns
-- Auto-label flight phases (takeoff, cruise, landing, idle) from sensor signatures
-- Anomaly detection to flag unusual vibration or orientation patterns
-
 ---
 
 ## Previous Iterations
 
 ### Enclosure R1
 
-The first enclosure prototype — open-top design with standoff-mounted boards.
+The first enclosure prototype. Open-top design with standoff-mounted boards.
 
 ![Enclosure R1 assembled](images/enclosure_r1_assembled.jpg)
